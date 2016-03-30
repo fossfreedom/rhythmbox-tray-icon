@@ -22,7 +22,8 @@ class TrayIcon(GObject.Object, Peas.Activatable):
         """
 
         self.create_popup_menu()
-        self.menu.popup(None, None, lambda w,x: self.icon.position_menu(self.menu, self.icon), self.icon, 3, time)
+        #self.icon.position_menu(self.menu, 0,0, self.icon))
+        self.menu.popup(None, None, lambda menu,w,x,p: self.icon.position_menu(self.menu, 0, 0, self.icon), self.icon, 3, time)
 
     def create_popup_menu(self):
         """
