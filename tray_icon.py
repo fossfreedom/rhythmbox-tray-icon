@@ -16,14 +16,20 @@ class TrayIcon(GObject.Object, Peas.Activatable):
     play_icon = os.path.join(sys.path[0], "tray_playing.png")
     menu = None
 
+    def position_menu_cb(self, m, x, y=None, i=None):
+        try:
+            return Gtk.StatusIcon.position_menu(self.menu, x, y, self.icon)
+        except (AttributeError, TypeError):
+            return Gtk.StatusIcon.position_menu(self.menu, self.icon)
+
     def show_popup_menu(self, icon, button, time, data = None):
         """
         Called when the icon is right clicked, displays the menu
         """
 
         self.create_popup_menu()
-        #self.icon.position_menu(self.menu, 0,0, self.icon))
-        self.menu.popup(None, None, lambda menu,w,x,p: self.icon.position_menu(self.menu, 0, 0, self.icon), self.icon, 3, time)
+        device = Gdk.Display.get_default().get_device_manager().get_client_pointer()
+        self.menu.popup_for_device(device, None, None, self.position_menu_cb, self.icon, 3, time)
 
     def create_popup_menu(self):
         """
@@ -35,10 +41,18 @@ class TrayIcon(GObject.Object, Peas.Activatable):
 
         self.menu = Gtk.Menu()
 
-        menuitem_playpause = Gtk.MenuItem("Play/Pause")
-        menuitem_next = Gtk.MenuItem("Next")
-        menuitem_prev = Gtk.MenuItem("Prev")
-        menuitem_quit = Gtk.MenuItem("Quit")
+        if self.playing:
+            menuitem_playpause = Gtk.ImageMenuItem(_("Pause"))
+            menuitem_playpause.set_image(Gtk.Image.new_from_icon_name("media-playback-pause-symbolic", Gtk.IconSize.MENU))
+        else:
+            menuitem_playpause = Gtk.ImageMenuItem(_("Play"))
+            menuitem_playpause.set_image(Gtk.Image.new_from_icon_name("media-playback-start-symbolic", Gtk.IconSize.MENU))
+        menuitem_next = Gtk.ImageMenuItem(_("Next"))
+        menuitem_next.set_image(Gtk.Image.new_from_icon_name("media-skip-forward-symbolic", Gtk.IconSize.MENU))
+        menuitem_prev = Gtk.ImageMenuItem(_("Previous"))
+        menuitem_prev.set_image(Gtk.Image.new_from_icon_name("media-skip-backward-symbolic", Gtk.IconSize.MENU))
+        menuitem_quit = Gtk.ImageMenuItem(_("Close"))
+        menuitem_quit.set_image(Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU))
 
         menuitem_star = self.get_rating_menuitem()
         if menuitem_star:
@@ -184,7 +198,11 @@ class TrayIcon(GObject.Object, Peas.Activatable):
         """
         Starts playing
         """
-        self.player.playpause(True) # does nothing argument
+        try:
+            self.player.playpause() # does nothing argument
+        except:
+            # Rhythmbox 3.3 support
+            self.player.playpause(True)
 
     def next(self, widget):
         """
@@ -213,23 +231,21 @@ class TrayIcon(GObject.Object, Peas.Activatable):
         Sets icon and tooltip when playing status changes
         """
 
+        self.playing = playing
+
         if playing:
             self.icon.set_from_file(self.play_icon)
             current_entry = self.shell.props.shell_player.get_playing_entry()
-            self.set_tooltip_text(current_entry.get_string(RB.RhythmDBPropType.ARTIST) + " - " + current_entry.get_string(RB.RhythmDBPropType.TITLE))
+            self.set_tooltip_text("%s\n%s" % (current_entry.get_string(RB.RhythmDBPropType.ARTIST), current_entry.get_string(RB.RhythmDBPropType.TITLE)))
         else:
             self.icon.set_from_file(self.rhythmbox_icon)
-            self.set_tooltip_text()
+            self.set_tooltip_text("Rhythmbox")
 
     def set_tooltip_text(self, message=""):
         """
         Sets tooltip to given message
         """
-        prepend = ""
-        if len(message) > 0:
-            prepend = "\r\n"
-        tooltip_text = message + prepend + "(Scroll = volume, click = visibility, middle click = next)"
-        self.icon.set_tooltip_text(tooltip_text)
+        self.icon.set_tooltip_text(message)
 
     def do_activate(self):
         """
@@ -239,6 +255,7 @@ class TrayIcon(GObject.Object, Peas.Activatable):
         self.wind = self.shell.get_property("window")
         self.player = self.shell.props.shell_player
         self.db = self.shell.props.db
+        self.playing = False
 
         self.wind.connect("delete-event", self.hide_on_delete)
         self.create_popup_menu()
@@ -250,7 +267,7 @@ class TrayIcon(GObject.Object, Peas.Activatable):
         self.icon.connect("button-press-event", self.toggle_player_visibility)
         self.player.connect("playing-changed", self.on_playing_changed)
 
-        self.set_tooltip_text()
+        self.set_tooltip_text("Rhythmbox")
 
     def on_scroll(self, widget, event):
         """
